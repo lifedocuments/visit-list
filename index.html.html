@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Merchant visit list</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#FFFFFF; --surface:#F2F5F6; --surface-2:#E6ECEE; --ink:#0E2F36; --ink-soft:#4F6A70;
+  --line:#D5DFE2; --accent:#0B6E7A; --on-accent:#FFFFFF;
+  --good:#1E8A52; --good-bg:#E3F4EA; --warn:#A86A00; --warn-bg:#FDF1DA; --bad:#C23B3B; --bad-bg:#FBE6E6;
+  --muted-bg:#EEF2F3;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1B1F; --surface:#15272C; --surface-2:#1C3238; --ink:#E8F1F2; --ink-soft:#9DB4B9;
+    --line:#2A434A; --accent:#3FB8C4; --on-accent:#06262B;
+    --good:#5BD08E; --good-bg:#173528; --warn:#F0B84A; --warn-bg:#3A2E14; --bad:#F07C7C; --bad-bg:#3D1F21;
+    --muted-bg:#1A2E33; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1B1F; --surface:#15272C; --surface-2:#1C3238; --ink:#E8F1F2; --ink-soft:#9DB4B9;
+  --line:#2A434A; --accent:#3FB8C4; --on-accent:#06262B;
+  --good:#5BD08E; --good-bg:#173528; --warn:#F0B84A; --warn-bg:#3A2E14; --bad:#F07C7C; --bad-bg:#3D1F21;
+  --muted-bg:#1A2E33; color-scheme: dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hind Siliguri",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.wrap{max-width:640px;margin:0 auto}
+
+/* header */
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.count{display:flex;align-items:baseline;gap:10px}
+.count b{font-size:34px;line-height:1;font-weight:700;font-variant-numeric:tabular-nums}
+.count span{color:var(--ink-soft);font-size:15px}
+.count .spacer{flex:1}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:6px 10px;font-size:14px}
+.bar{height:6px;background:var(--surface-2);border-radius:3px;margin:10px 0 12px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--good);width:0;transition:width .3s}
+.search{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:16px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:14px;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.sortrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;font-size:14px;color:var(--ink-soft)}
+.sortrow select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:4px 8px;font-size:14px}
+
+/* area groups */
+.area{position:sticky;top:var(--hdr,0px);z-index:3;background:var(--surface);padding:8px 16px;display:flex;justify-content:space-between;font-weight:600;font-size:15px;border-bottom:1px solid var(--line)}
+.area small{color:var(--ink-soft);font-weight:500;font-variant-numeric:tabular-nums}
+
+/* merchant rows */
+.row{border-bottom:1px solid var(--line)}
+.row-main{display:flex;gap:12px;padding:14px 16px;align-items:flex-start}
+.tick{flex:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--line);background:var(--bg);display:grid;place-items:center;font-size:20px;color:transparent}
+.row[data-out="visited"] .tick{background:var(--good);border-color:var(--good);color:#fff}
+.row[data-out="unavailable"] .tick,.row[data-out="closed"] .tick{background:var(--warn-bg);border-color:var(--warn);color:var(--warn);font-size:18px}
+.info{flex:1;min-width:0;background:none;border:0;text-align:left;padding:0}
+.name{font-size:18px;font-weight:600;line-height:1.25}
+.row[data-out="visited"] .name{color:var(--ink-soft)}
+.sub{color:var(--ink-soft);font-size:14px;margin-top:2px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tag{font-size:12.5px;font-weight:600;border-radius:6px;padding:2px 8px;background:var(--muted-bg);color:var(--ink-soft)}
+.tag.good{background:var(--good-bg);color:var(--good)}
+.tag.bad{background:var(--bad-bg);color:var(--bad)}
+.tag.warn{background:var(--warn-bg);color:var(--warn)}
+.nums{display:flex;gap:16px;margin-top:8px;font-size:14px;color:var(--ink-soft)}
+.nums b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+.detail{display:none;padding:0 16px 16px 72px}
+.row.open .detail{display:block}
+.addr{font-size:15px;margin:0 0 4px}
+.reg{font-size:13.5px;color:var(--ink-soft);margin:0 0 12px}
+.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.act{display:flex;align-items:center;justify-content:center;gap:6px;min-height:46px;border-radius:12px;border:1px solid var(--line);background:var(--surface);text-decoration:none;color:var(--ink);font-weight:600;font-size:15px}
+.act.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.outcomes{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.out{flex:1;min-width:90px;min-height:42px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-size:14px;font-weight:600}
+.out[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.note{width:100%;margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px;font-size:15px;min-height:64px;resize:vertical}
+.visited-at{font-size:12.5px;color:var(--ink-soft);margin-top:6px}
+
+/* empty / load */
+.empty{padding:28px 20px}
+.empty h1{font-size:26px;line-height:1.2;margin:0 0 8px}
+.empty p{color:var(--ink-soft);margin:0 0 18px;max-width:52ch}
+.loadbtn{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border-radius:14px;border:0;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:17px;margin-bottom:10px}
+.ghost{width:100%;min-height:48px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:600}
+.paste{width:100%;min-height:140px;margin-top:10px;border-radius:12px;border:1px solid var(--line);background:var(--surface);padding:10px;font-size:14px;display:none}
+.paste.show{display:block}
+.cols{font-size:13px;color:var(--ink-soft);margin-top:18px;line-height:1.6}
+.msg{margin:10px 0;padding:10px 12px;border-radius:10px;background:var(--bad-bg);color:var(--bad);font-size:14px;display:none}
+.msg.show{display:block}
+.none{padding:32px 20px;color:var(--ink-soft);text-align:center}
+.footer{padding:20px 16px 40px;display:grid;gap:10px}
+.small{font-size:13px;color:var(--ink-soft);text-align:center}
+#hidden{display:none}
+.views{display:flex;background:var(--surface-2);border-radius:10px;padding:3px;gap:3px}
+.views button{border:0;background:none;border-radius:8px;padding:5px 12px;font-size:14px;font-weight:600;color:var(--ink-soft)}
+.views button[aria-pressed="true"]{background:var(--bg);color:var(--ink)}
+.routebox{padding:14px 16px 6px}
+.routebox h2{font-size:20px;margin:0}
+.routebox p{margin:4px 0 10px;color:var(--ink-soft);font-size:14px}
+.mapsvg{width:100%;height:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;display:block}
+.mapsvg .leg{stroke:var(--accent);stroke-width:3;fill:none;stroke-linejoin:round;opacity:.75}
+.mapsvg .stop{fill:var(--accent);stroke:var(--bg);stroke-width:2}
+.mapsvg .stop.done{fill:var(--ink-soft)}
+.mapsvg text{fill:var(--on-accent);font-size:17px;font-weight:700;text-anchor:middle;dominant-baseline:central;font-family:inherit}
+.mapsvg .me{fill:var(--bad);stroke:var(--bg);stroke-width:3}
+.routeacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.routeacts button,.routeacts a{flex:1;min-width:140px;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:14px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:var(--ink);padding:0 10px;text-align:center}
+.routeacts a.go{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.stopno{flex:none;width:44px;text-align:center}
+.stopno b{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-size:17px}
+.row[data-out="visited"] .stopno b{background:var(--ink-soft)}
+.stopno small{display:block;font-size:12px;color:var(--ink-soft);margin-top:4px;font-variant-numeric:tabular-nums}
+.nolocnote{padding:10px 16px;font-size:13.5px;color:var(--ink-soft);background:var(--warn-bg)}
+
+/* sheet (report fallback / menu) */
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;z-index:20}
+.sheet.show{display:flex}
+.sheet-box{background:var(--bg);width:100%;max-width:640px;margin:0 auto;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px))}
+.sheet-box h2{font-size:19px;margin:0 0 10px}
+.sheet-box textarea{width:100%;min-height:180px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px;font-size:13px}
+.sheet-box .ghost{margin-top:10px}
+@media (prefers-reduced-motion: reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header id="hdr" hidden>
+    <div class="count"><b id="cnt">0/0</b><span id="cntlabel">visited</span><span class="spacer"></span><div class="views" role="group" aria-label="View"><button data-view="list" aria-pressed="true">List</button><button data-view="route" aria-pressed="false">Route</button></div><button class="iconbtn" id="menuBtn" aria-haspopup="dialog">Menu</button></div>
+    <div class="bar" aria-hidden="true"><i id="barfill"></i></div>
+    <input class="search" id="q" type="search" placeholder="Search name, owner, mobile, area" autocomplete="off">
+    <div class="chips" role="group" aria-label="Filters">
+      <button class="chip" data-f="todo" aria-pressed="false">Not visited</button>
+      <button class="chip" data-f="noqr" aria-pressed="false">No QR</button>
+      <button class="chip" data-f="nowallet" aria-pressed="false">Wallet inactive</button>
+      <button class="chip" data-f="nogold" aria-pressed="false">No Gold</button>
+      <button class="chip" data-f="gold" aria-pressed="false">Gold</button>
+    </div>
+    <div class="sortrow">
+      <label for="area">Area</label>
+      <select id="area"><option value="">All upazilas</option></select>
+      <label for="sort">Sort</label>
+      <select id="sort">
+        <option value="cust">Most customers</option>
+        <option value="trt">Highest Sept TRT</option>
+        <option value="name">Name A–Z</option>
+        <option value="reg">Newest registered</option>
+      </select>
+    </div>
+  </header>
+
+  <main id="main"></main>
+</div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-box" id="sheetBox"></div>
+</div>
+<input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+
+<script>
+(() => {
+  const KEY_DATA = 'visitlist:rows:v1';
+  const KEY_VIS = 'visitlist:visits:v1';
+  const COLS = {
+    mobile: ['mobile','mobileno','mobilenumber','phone'],
+    business: ['businessname','shopname'],
+    owner: ['ownername','owner'],
+    type: ['businesstype','type'],
+    district: ['district'],
+    upazila: ['upazila','thana','upozila'],
+    address: ['businessaddress','address'],
+    url: ['addressurl','mapurl','location','locationurl'],
+    wallet: ['walletstatus','wallet'],
+    qr: ['qrstatus','qr'],
+    gold: ['goldpackage','gold'],
+    customers: ['numberofcustomers','customers','noofcustomers','totalcustomers'],
+    trt: ['septtrt','trt','septembertrt'],
+    reg: ['registrationdate','regdate','registered'],
+    lat: ['latitude','lat'],
+    lng: ['longitude','lng','lon','long']
+  };
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+    del(k) { try { localStorage.removeItem(k); } catch {} }
+  };
+
+  let rows = store.get(KEY_DATA, []);
+  let visits = store.get(KEY_VIS, {});
+  const state = { q: '', filters: new Set(), area: '', sort: 'cust', open: null, view: 'list', me: null, meMsg: '' };
+  let downloads = null;
+  if (window.claude && typeof window.claude.use === 'function') {
+    window.claude.use('downloads').then((d) => { downloads = d; }).catch(() => {});
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const norm = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const num = (v) => { const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, '')); return Number.isFinite(n) ? n : 0; };
+  const keyOf = (r, i) => (r.mobile ? String(r.mobile).replace(/\D/g, '') : '') || ('row' + i);
+
+  // Status reading: say "bad" before "good" so "inactive" isn't read as "active".
+  function statusClass(v, kind) {
+    const s = String(v ?? '').trim().toLowerCase();
+    if (!s) return 'muted';
+    if (/\b(inactive|not|no|none|pending|disabled|deactivated|expired|false|blocked|n\/a)\b|^0$|^n$/.test(s)) return 'bad';
+    if (kind === 'gold' && /\b(1m|3m|6m|12m|month|gold|yes|active)\b|\d+\s*m/.test(s)) return 'good';
+    if (/\b(active|yes|done|enabled|verified|live|ok|true|issued|installed|subscribed|paid)\b|^1$|^y$/.test(s)) return 'good';
+    return 'warn';
+  }
+  const isBad = (v, k) => statusClass(v, k) === 'bad' || statusClass(v, k) === 'muted';
+
+  function fmtDate(v) {
+    if (v === null || v === undefined || v === '') return '';
+    let d = null;
+    if (v instanceof Date) d = v;
+    else if (typeof v === 'number' && v > 20000 && v < 80000) d = new Date(Math.round((v - 25569) * 86400000));
+    else { const t = Date.parse(v); if (!Number.isNaN(t)) d = new Date(t); }
+    if (!d || Number.isNaN(d.getTime())) return String(v);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  const dateNum = (v) => { if (v instanceof Date) return v.getTime(); if (typeof v === 'number') return v; const t = Date.parse(v); return Number.isNaN(t) ? 0 : t; };
+
+  // ---------- loading ----------
+  function mapRows(objs) {
+    if (!objs.length) throw new Error('The file has no rows under the header.');
+    const headers = Object.keys(objs[0]);
+    const pick = {};
+    for (const [field, names] of Object.entries(COLS)) {
+      const h = headers.find((h) => names.includes(norm(h)));
+      if (h) pick[field] = h;
+    }
+    if (!pick.business && !pick.mobile) throw new Error('Could not find the "Business Name" or "Mobile" column. Check the first row is the header.');
+    return objs.map((o) => {
+      const r = {};
+      for (const [field, h] of Object.entries(pick)) {
+        let v = o[h];
+        if (v instanceof Date) v = v.toISOString();
+        r[field] = v === undefined || v === null ? '' : v;
+      }
+      return r;
+    }).filter((r) => String(r.business || r.mobile).trim());
+  }
+  function accept(newRows) {
+    rows = newRows;
+    if (!store.set(KEY_DATA, rows)) showMsg('Loaded, but this browser could not save the list for next time.');
+    state.open = null;
+    render();
+  }
+  function readFile(f) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        if (!window.XLSX) throw new Error('The spreadsheet reader did not load. Check your internet connection and try again, or use "Paste from Excel".');
+        const wb = XLSX.read(new Uint8Array(reader.result), { type: 'array', cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        accept(mapRows(XLSX.utils.sheet_to_json(ws, { defval: '', raw: true })));
+      } catch (e) { showMsg(e.message); }
+    };
+    reader.onerror = () => showMsg('Could not read that file. Try saving it again as .xlsx or .csv.');
+    reader.readAsArrayBuffer(f);
+  }
+  function readPaste(text) {
+    const lines = text.replace(/\r/g, '').split('\n').filter((l) => l.trim());
+    if (lines.length < 2) throw new Error('Paste the header row and at least one merchant row.');
+    const sep = lines[0].includes('\t') ? '\t' : ',';
+    const head = lines[0].split(sep).map((h) => h.replace(/^"|"$/g, '').trim());
+    const objs = lines.slice(1).map((l) => {
+      const cells = l.split(sep);
+      const o = {};
+      head.forEach((h, i) => { o[h] = (cells[i] ?? '').replace(/^"|"$/g, '').trim(); });
+      return o;
+    });
+    accept(mapRows(objs));
+  }
+  function showMsg(t) { const m = $('msg'); if (m) { m.textContent = t; m.classList.add('show'); } else alert(t); }
+
+  // ---------- view ----------
+  function filtered() {
+    const q = state.q.trim().toLowerCase();
+    let list = rows.map((r, i) => ({ r, i, k: keyOf(r, i) }));
+    if (state.area) list = list.filter(({ r }) => String(r.upazila || 'Unknown area') === state.area);
+    if (q) list = list.filter(({ r }) => [r.business, r.owner, r.mobile, r.upazila, r.district, r.address, r.type].join(' ').toLowerCase().includes(q));
+    const f = state.filters;
+    if (f.has('todo')) list = list.filter(({ k }) => !visits[k]);
+    if (f.has('noqr')) list = list.filter(({ r }) => isBad(r.qr));
+    if (f.has('nowallet')) list = list.filter(({ r }) => isBad(r.wallet));
+    if (f.has('nogold')) list = list.filter(({ r }) => isBad(r.gold, 'gold'));
+    if (f.has('gold')) list = list.filter(({ r }) => statusClass(r.gold, 'gold') === 'good');
+    const s = state.sort;
+    list.sort((a, b) =>
+      s === 'trt' ? num(b.r.trt) - num(a.r.trt) :
+      s === 'name' ? String(a.r.business).localeCompare(String(b.r.business)) :
+      s === 'reg' ? dateNum(b.r.reg) - dateNum(a.r.reg) :
+      num(b.r.customers) - num(a.r.customers));
+    return list;
+  }
+
+  function mapLink(r) {
+    const u = String(r.url || '').trim();
+    if (/^https?:\/\//i.test(u)) return u;
+    const qText = [r.business, r.address, r.upazila, r.district, 'Bangladesh'].filter(Boolean).join(', ');
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(qText);
+  }
+  function phoneParts(m) {
+    let d = String(m || '').replace(/\D/g, '');
+    if (d.length === 10 && d.startsWith('1')) d = '0' + d;
+    const local = d.startsWith('880') ? '0' + d.slice(3) : d;
+    const intl = local.startsWith('0') ? '88' + local : d;
+    return { local, intl };
+  }
+
+  // ---------- location & route ----------
+  function coords(r) {
+    const okPair = (a, b) => { const la = parseFloat(a), lo = parseFloat(b); return Number.isFinite(la) && Number.isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180 && !(la === 0 && lo === 0) ? { lat: la, lng: lo } : null; };
+    const direct = r.lat !== undefined && r.lng !== undefined && r.lat !== '' ? okPair(r.lat, r.lng) : null;
+    if (direct) return direct;
+    let u = String(r.url || '');
+    try { u = decodeURIComponent(u); } catch {}
+    const pats = [/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, /@(-?\d+\.\d+),\s*(-?\d+\.\d+)/, /[?&](?:q|query|ll|destination|center|daddr)=(?:loc:)?(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/, /^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/];
+    for (const re of pats) { const m = u.match(re); if (m) { const c = okPair(m[1], m[2]); if (c) return c; } }
+    return null;
+  }
+  function km(a, b) {
+    const R = 6371, t = Math.PI / 180;
+    const dLa = (b.lat - a.lat) * t, dLo = (b.lng - a.lng) * t;
+    const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLo / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  // Nearest next stop first, then 2-opt to remove crossings / back-and-forth.
+  function planRoute(items, start) {
+    const pts = items.slice();
+    if (!pts.length) return [];
+    let cur = start || pts[0].c;
+    const order = [];
+    const left = new Set(pts.map((_, i) => i));
+    if (!start) {
+      // No GPS: begin at the stop on the edge of the area (farthest from the
+      // middle), so the route sweeps one way instead of doubling back.
+      const mid = { lat: pts.reduce((a, p) => a + p.c.lat, 0) / pts.length, lng: pts.reduce((a, p) => a + p.c.lng, 0) / pts.length };
+      let edge = 0, ed = -1;
+      pts.forEach((p, i) => { const d = km(mid, p.c); if (d > ed) { ed = d; edge = i; } });
+      order.push(edge); left.delete(edge); cur = pts[edge].c;
+    }
+    while (left.size) {
+      let best = -1, bd = Infinity;
+      for (const i of left) { const d = km(cur, pts[i].c); if (d < bd) { bd = d; best = i; } }
+      order.push(best); left.delete(best); cur = pts[best].c;
+    }
+    if (order.length <= 300) {
+      const P = (i) => (i < 0 ? start : pts[order[i]].c);
+      const first = start ? 0 : 1;
+      let improved = true, guard = 0;
+      while (improved && guard++ < 40) {
+        improved = false;
+        for (let i = first; i < order.length - 1; i++) {
+          for (let j = i + 1; j < order.length; j++) {
+            const a = i === 0 ? (start || null) : P(i - 1);
+            if (!a) continue;
+            const b = P(i), c = P(j), d = j + 1 < order.length ? P(j + 1) : null;
+            const before = km(a, b) + (d ? km(c, d) : 0);
+            const after = km(a, c) + (d ? km(b, d) : 0);
+            if (after + 1e-9 < before) { order.splice(i, j - i + 1, ...order.slice(i, j + 1).reverse()); improved = true; }
+          }
+        }
+      }
+    }
+    let prev = start;
+    return order.map((i) => { const it = pts[i]; const leg = prev ? km(prev, it.c) : 0; prev = it.c; return { ...it, leg }; });
+  }
+  function mapSVG(route, start) {
+    const all = route.map((s) => s.c).concat(start ? [start] : []);
+    const lats = all.map((p) => p.lat), lngs = all.map((p) => p.lng);
+    const minLa = Math.min(...lats), maxLa = Math.max(...lats), minLo = Math.min(...lngs), maxLo = Math.max(...lngs);
+    const kx = Math.cos(((minLa + maxLa) / 2) * Math.PI / 180);
+    const spanX = Math.max((maxLo - minLo) * kx, 1e-5), spanY = Math.max(maxLa - minLa, 1e-5);
+    const W = 600, pad = 34, maxInnerH = 440, innerW = W - 2 * pad;
+    const scale = Math.min(innerW / spanX, maxInnerH / spanY);
+    const H = Math.max(Math.round(spanY * scale + 2 * pad), 240);
+    const offX = pad + (innerW - spanX * scale) / 2, offY = (H - spanY * scale) / 2;
+    const X = (p) => offX + (p.lng - minLo) * kx * scale;
+    const Y = (p) => offY + (maxLa - p.lat) * scale;
+    const line = (start ? [start] : []).concat(route.map((s) => s.c)).map((p) => `${X(p).toFixed(1)},${Y(p).toFixed(1)}`).join(' ');
+    const dots = route.map((s, i) => `<g><circle class="stop${visits[s.k]?.out === 'visited' ? ' done' : ''}" cx="${X(s.c).toFixed(1)}" cy="${Y(s.c).toFixed(1)}" r="17"/><text x="${X(s.c).toFixed(1)}" y="${Y(s.c).toFixed(1)}">${i + 1}</text></g>`).join('');
+    const me = start ? `<circle class="me" cx="${X(start).toFixed(1)}" cy="${Y(start).toFixed(1)}" r="12"><title>You</title></circle>` : '';
+    return `<svg class="mapsvg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Sketch of stop locations in route order"><polyline class="leg" points="${line}"/>${me}${dots}</svg>`;
+  }
+  // Google Maps directions in chunks of up to 9 stops (8 waypoints + destination).
+  function gmapsLinks(route, start) {
+    const pts = route.map((s) => `${s.c.lat},${s.c.lng}`);
+    if (!pts.length) return [];
+    if (!start && pts.length === 1) return [{ url: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(pts[0]), label: 'stop 1' }];
+    const links = [];
+    let origin = start ? `${start.lat},${start.lng}` : pts[0];
+    let idx = start ? 0 : 1;
+    while (idx < pts.length) {
+      const chunk = pts.slice(idx, idx + 9);
+      const dest = chunk[chunk.length - 1];
+      const way = chunk.slice(0, -1);
+      const url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=' + encodeURIComponent(origin) +
+        '&destination=' + encodeURIComponent(dest) + (way.length ? '&waypoints=' + encodeURIComponent(way.join('|')) : '');
+      const from = links.length === 0 && !start ? 1 : idx + 1;
+      links.push({ url, label: `stops ${from}–${idx + chunk.length}` });
+      origin = dest; idx += chunk.length;
+    }
+    return links;
+  }
+
+  function rowHTML({ r, k, stop, leg }) {
+    const v = visits[k];
+    const out = v ? v.out : '';
+    const open = state.open === k;
+    const tick = out === 'visited' ? '✓' : out ? '!' : '';
+    const tags = [
+      r.wallet !== '' ? `<span class="tag ${statusClass(r.wallet)}">Wallet: ${esc(r.wallet)}</span>` : '',
+      r.qr !== '' ? `<span class="tag ${statusClass(r.qr)}">QR: ${esc(r.qr)}</span>` : '',
+      r.gold !== '' ? `<span class="tag ${statusClass(r.gold, 'gold')}">Gold: ${esc(r.gold)}</span>` : ''
+    ].join('');
+    const p = phoneParts(r.mobile);
+    const outLabel = { visited: 'Visited', unavailable: 'Owner not available', closed: 'Shop closed' };
+    return `
+    <div class="row${open ? ' open' : ''}" data-k="${esc(k)}" data-out="${esc(out)}">
+      <div class="row-main">
+        ${stop ? `<div class="stopno"><b>${stop}</b>${leg ? `<small>${leg < 1 ? Math.round(leg * 1000) + ' m' : leg.toFixed(1) + ' km'}</small>` : ''}</div>` : `<button class="tick" data-act="tick" aria-label="${out ? 'Clear visit for ' : 'Mark visited: '}${esc(r.business)}">${tick}</button>`}
+        <button class="info" data-act="toggle" aria-expanded="${open}">
+          <div class="name">${esc(r.business || '(no business name)')}</div>
+          <div class="sub">${esc([r.owner, r.type].filter(Boolean).join(', '))}</div>
+          ${tags ? `<div class="tags">${tags}</div>` : ''}
+          <div class="nums"><span>Customers <b>${esc(r.customers === '' ? '–' : r.customers)}</b></span><span>Sept TRT <b>${esc(r.trt === '' ? '–' : r.trt)}</b></span></div>
+        </button>
+      </div>
+      <div class="detail">
+        <p class="addr">${esc([r.address, r.upazila, r.district].filter(Boolean).join(', ') || 'No address given')}</p>
+        <p class="reg">${r.reg !== '' ? 'Registered ' + esc(fmtDate(r.reg)) + ' · ' : ''}${esc(r.mobile)}</p>
+        <div class="actions">
+          <a class="act primary" href="tel:${esc(p.local)}">Call</a>
+          <a class="act" href="https://wa.me/${esc(p.intl)}" target="_blank" rel="noopener">WhatsApp</a>
+          <a class="act" href="${esc(mapLink(r))}" target="_blank" rel="noopener">Map</a>
+        </div>
+        <div class="outcomes" role="group" aria-label="Visit result">
+          <button class="out" data-act="out" data-v="visited" aria-pressed="${out === 'visited'}">Visited</button>
+          <button class="out" data-act="out" data-v="unavailable" aria-pressed="${out === 'unavailable'}">Not available</button>
+          <button class="out" data-act="out" data-v="closed" aria-pressed="${out === 'closed'}">Shop closed</button>
+        </div>
+        <textarea class="note" data-act="note" placeholder="Note: what was discussed, follow-up needed">${esc(v?.note || '')}</textarea>
+        ${v ? `<div class="visited-at">${esc(outLabel[out] || 'Noted')} at ${esc(new Date(v.at).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }))}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  function renderEmpty() {
+    $('hdr').hidden = true;
+    $('main').innerHTML = `
+      <section class="empty">
+        <h1>Merchant visit list</h1>
+        <p>Load your merchant sheet to turn it into a visit list grouped by upazila, with call and map buttons and visit tracking. The data stays on this phone.</p>
+        <div class="msg" id="msg" role="alert"></div>
+        <button class="loadbtn" id="pickFile">Load Excel or CSV file</button>
+        <button class="ghost" id="showPaste">Paste rows from Excel</button>
+        <textarea class="paste" id="pasteBox" placeholder="Copy the header row and merchant rows in Excel, then paste here"></textarea>
+        <button class="ghost" id="usePaste" style="display:none;margin-top:10px">Make visit list</button>
+        <p class="cols">Expected columns: Mobile, Business Name, Owner Name, Business Type, District, Upazila, Business Address, Address URL, Wallet Status, QR Status, Gold Package, Number of customers, Sept TRT, Registration Date. For the route view, Address URL should contain coordinates, or add Latitude and Longitude columns.</p>
+      </section>`;
+    $('pickFile').onclick = () => $('file').click();
+    $('showPaste').onclick = () => { $('pasteBox').classList.add('show'); $('usePaste').style.display = 'block'; $('pasteBox').focus(); };
+    $('usePaste').onclick = () => { try { readPaste($('pasteBox').value); } catch (e) { showMsg(e.message); } };
+  }
+
+  function render() {
+    if (!rows.length) return renderEmpty();
+    $('hdr').hidden = false;
+    // area options
+    const areas = [...new Set(rows.map((r) => String(r.upazila || 'Unknown area')))].sort();
+    const sel = $('area');
+    const cur = state.area;
+    sel.innerHTML = '<option value="">All upazilas</option>' + areas.map((a) => `<option ${a === cur ? 'selected' : ''}>${esc(a)}</option>`).join('');
+    // counter
+    const total = rows.length;
+    const done = rows.filter((r, i) => visits[keyOf(r, i)]).length;
+    $('cnt').textContent = `${done}/${total}`;
+    $('cntlabel').textContent = done === total ? 'all visited' : 'visited';
+    $('barfill').style.width = total ? (done / total * 100) + '%' : '0';
+
+    const list = filtered();
+    document.querySelectorAll('.views button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.view === state.view));
+    if (state.view === 'route' && list.length) return renderRoute(list);
+    if (!list.length) {
+      $('main').innerHTML = `<div class="none">No merchants match these filters.</div>${footer()}`;
+      wireFooter();
+      return;
+    }
+    // group by upazila
+    const groups = new Map();
+    for (const it of list) {
+      const a = String(it.r.upazila || 'Unknown area');
+      if (!groups.has(a)) groups.set(a, []);
+      groups.get(a).push(it);
+    }
+    const sortedAreas = [...groups.keys()].sort();
+    let html = '';
+    for (const a of sortedAreas) {
+      const items = groups.get(a);
+      const allInArea = rows.map((r, i) => ({ r, k: keyOf(r, i) })).filter(({ r }) => String(r.upazila || 'Unknown area') === a);
+      const doneInArea = allInArea.filter(({ k }) => visits[k]).length;
+      const dist = items[0].r.district ? ', ' + esc(items[0].r.district) : '';
+      html += `<div class="area"><span>${esc(a)}${dist}</span><small>${doneInArea}/${allInArea.length} visited</small></div>`;
+      html += items.map(rowHTML).join('');
+    }
+    $('main').innerHTML = html + footer();
+    wireFooter();
+    document.documentElement.style.setProperty('--hdr', $('hdr').offsetHeight + 'px');
+  }
+  function renderRoute(list) {
+    const withC = [], noC = [];
+    for (const it of list) { const c = coords(it.r); if (c) withC.push({ ...it, c }); else noC.push(it); }
+    let html = '';
+    if (withC.length) {
+      const start = state.me;
+      const route = planRoute(withC, start);
+      const total = route.reduce((s, x) => s + x.leg, 0);
+      const links = gmapsLinks(route, start);
+      html += `<section class="routebox">
+        <h2>${route.length} stops · about ${total < 1 ? Math.round(total * 1000) + ' m' : total.toFixed(1) + ' km'}</h2>
+        <p>${start ? 'Starting from your location.' : 'Starting from the edge of the area.'} Nearest next stop first; straight-line distances.</p>
+        ${mapSVG(route, start)}
+        <div class="routeacts">
+          <button id="useMe">${start ? 'Update my location' : 'Start from my location'}</button>
+          ${start ? '<button id="noMe">Start from stop 1</button>' : ''}
+          ${links.map((l) => `<a class="go" href="${esc(l.url)}" target="_blank" rel="noopener">Open ${esc(l.label)} in Google Maps</a>`).join('')}
+        </div>
+        ${state.meMsg ? `<p>${esc(state.meMsg)}</p>` : ''}
+      </section>`;
+      html += route.map((s, i) => rowHTML({ ...s, stop: i + 1, leg: i === 0 && !start ? 0 : s.leg })).join('');
+    } else {
+      html += `<section class="routebox"><h2>No map locations found</h2><p>None of these merchants has coordinates. Use Address URLs that contain them (for example maps.google.com/?q=23.81,90.41) or add Latitude and Longitude columns.</p></section>`;
+    }
+    if (noC.length) {
+      html += `<div class="area"><span>No map location</span><small>${noC.length}</small></div>`;
+      html += `<div class="nolocnote">Short links like maps.app.goo.gl don't include coordinates. Open these with the Map button, or add Latitude and Longitude columns to the sheet.</div>`;
+      html += noC.map(rowHTML).join('');
+    }
+    $('main').innerHTML = html + footer();
+    wireFooter();
+    const um = $('useMe'); if (um) um.onclick = locate;
+    const nm = $('noMe'); if (nm) nm.onclick = () => { state.me = null; state.meMsg = ''; render(); };
+    document.documentElement.style.setProperty('--hdr', $('hdr').offsetHeight + 'px');
+  }
+  function locate() {
+    if (!navigator.geolocation) { state.meMsg = "This browser can't share your location, so the route starts from stop 1."; return render(); }
+    state.meMsg = 'Finding your location…'; render();
+    navigator.geolocation.getCurrentPosition(
+      (p) => { state.me = { lat: p.coords.latitude, lng: p.coords.longitude }; state.meMsg = ''; render(); },
+      () => { state.me = null; state.meMsg = "Location isn't available here (permission blocked or turned off), so the route starts from stop 1."; render(); },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+    );
+  }
+  document.querySelectorAll('.views button').forEach((b) => b.addEventListener('click', () => { state.view = b.dataset.view; state.open = null; render(); }));
+
+  function footer() {
+    return `<div class="footer"><button class="loadbtn" id="report">Save visit report (CSV)</button><p class="small">Visits are saved on this phone automatically.</p></div>`;
+  }
+  function wireFooter() { const b = $('report'); if (b) b.onclick = saveReport; }
+
+  // ---------- actions ----------
+  function setVisit(k, out) {
+    const prev = visits[k];
+    if (!out) delete visits[k];
+    else visits[k] = { out, note: prev?.note || '', at: new Date().toISOString() };
+    store.set(KEY_VIS, visits);
+  }
+  $('main').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const row = btn.closest('.row');
+    if (!row) return;
+    const k = row.dataset.k;
+    const act = btn.dataset.act;
+    if (act === 'toggle') { state.open = state.open === k ? null : k; render(); }
+    else if (act === 'tick') { setVisit(k, visits[k] ? null : 'visited'); render(); }
+    else if (act === 'out') { setVisit(k, visits[k]?.out === btn.dataset.v ? null : btn.dataset.v); state.open = k; render(); }
+  });
+  $('main').addEventListener('input', (e) => {
+    if (!e.target.matches('[data-act="note"]')) return;
+    const k = e.target.closest('.row').dataset.k;
+    if (!visits[k]) visits[k] = { out: '', note: '', at: new Date().toISOString() };
+    visits[k].note = e.target.value;
+    store.set(KEY_VIS, visits);
+  });
+  $('q').addEventListener('input', (e) => { state.q = e.target.value; render(); });
+  $('area').addEventListener('change', (e) => { state.area = e.target.value; render(); });
+  $('sort').addEventListener('change', (e) => { state.sort = e.target.value; render(); });
+  document.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => {
+    const f = c.dataset.f;
+    if (state.filters.has(f)) state.filters.delete(f); else state.filters.add(f);
+    if (f === 'gold') state.filters.delete('nogold');
+    if (f === 'nogold') state.filters.delete('gold');
+    document.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', state.filters.has(x.dataset.f)));
+    render();
+  }));
+  $('file').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) readFile(f); e.target.value = ''; });
+
+  function csvCell(v) { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  function reportCSV() {
+    const head = ['Mobile', 'Business Name', 'Owner Name', 'District', 'Upazila', 'Result', 'Note', 'Time'];
+    const label = { visited: 'Visited', unavailable: 'Owner not available', closed: 'Shop closed', '': 'Note only' };
+    const lines = [head.join(',')];
+    rows.forEach((r, i) => {
+      const v = visits[keyOf(r, i)];
+      lines.push([r.mobile, r.business, r.owner, r.district, r.upazila, v ? label[v.out] : 'Not visited', v?.note || '', v ? new Date(v.at).toLocaleString('en-GB') : ''].map(csvCell).join(','));
+    });
+    return '\ufeff' + lines.join('\n');
+  }
+  async function saveReport() {
+    const csv = reportCSV();
+    const name = 'visit-report-' + new Date().toISOString().slice(0, 10) + '.csv';
+    if (downloads) {
+      try { await downloads.save({ filename: name, data: csv }); return; }
+      catch (e) { if (e && e.code === 'declined') return; }
+    }
+    // Opened as a normal web page or file (outside Claude): download directly.
+    if (!window.claude) {
+      try {
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        return;
+      } catch { /* fall through to copy sheet */ }
+    }
+    openSheet(`<h2 id="sheetTitle">Visit report</h2><p class="small" style="text-align:left">Saving files isn't available here. Copy this text and paste it into Excel or a message.</p><textarea readonly>${esc(csv.replace(/^\ufeff/, ''))}</textarea><button class="ghost" id="closeSheet">Close</button>`);
+  }
+
+  function openSheet(html) {
+    $('sheetBox').innerHTML = html;
+    $('sheet').classList.add('show');
+    const c = $('closeSheet'); if (c) c.onclick = closeSheet;
+    const first = $('sheetBox').querySelector('button,textarea'); if (first) first.focus();
+  }
+  function closeSheet() { $('sheet').classList.remove('show'); }
+  $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) closeSheet(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+
+  $('menuBtn').addEventListener('click', () => {
+    openSheet(`<h2 id="sheetTitle">Menu</h2>
+      <button class="loadbtn" id="mReport">Save visit report (CSV)</button>
+      <button class="ghost" id="mLoad">Load a new merchant file</button>
+      <button class="ghost" id="mClearVisits">Clear all visit marks</button>
+      <button class="ghost" id="mClearAll">Remove merchant list from this phone</button>
+      <button class="ghost" id="closeSheet">Close</button>`);
+    $('mReport').onclick = () => { closeSheet(); saveReport(); };
+    $('mLoad').onclick = () => { closeSheet(); $('file').click(); };
+    $('mClearVisits').onclick = () => { if (confirm('Clear all visit marks and notes?')) { visits = {}; store.set(KEY_VIS, visits); closeSheet(); render(); } };
+    $('mClearAll').onclick = () => { if (confirm('Remove the merchant list and all visits from this phone?')) { rows = []; visits = {}; store.del(KEY_DATA); store.del(KEY_VIS); closeSheet(); render(); } };
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
